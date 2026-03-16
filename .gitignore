@@ -1,3 +1,4 @@
 *.csv
+!bixi.csv
 cache/
 *.json
