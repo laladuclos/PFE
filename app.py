@@ -41,6 +41,14 @@ URL_RESEAU = (
     "https://donnees.montreal.ca/dataset/5ea29f40-1b5b-4f34-85b3-7c67088ff536"
     "/resource/0dc6612a-be66-406b-b2d9-59c9e1c65ebf/download/reseau_cyclable.geojson"
 )
+URL_ACCIDENTS = (
+    "https://donnees.montreal.ca/dataset/53d2e586-6d7f-4eae-9a7d-4d23b774051b"
+    "/resource/92716a61-6834-454b-974d-4d57a9d00921/download/collisions_routieres.csv"
+)
+URL_COMPTEURS = (
+    "https://donnees.montreal.ca/dataset/f170fecc-18db-44bc-b48d-01d01374c653"
+    "/resource/66966141-6101-4433-a267-3312f2c83693/download/comptage_velo_2025.csv"
+)
 URL_BIXI_STATIONS = "https://gbfs.velobixi.com/gbfs/2-2/fr/station_information.json"
 URL_BIXI_STATUS   = "https://gbfs.velobixi.com/gbfs/2-2/fr/station_status.json"
 
@@ -69,12 +77,14 @@ section[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.12) !impo
     padding: 10px 0 10px 18px;
     margin-bottom: 28px;
 }
+/* PAGE 1 FIX: grand titre agrandi */
 .page-header h1 {
     font-family: 'DM Serif Display', serif;
-    font-size: 28px; font-weight: 400;
+    font-size: 36px; font-weight: 400;
     color: #1A2533; margin: 0 0 4px 0;
 }
-.page-header p { font-size: 14px; color: #566573; margin: 0; }
+/* PAGE 1 FIX: sous-titre réduit */
+.page-header p { font-size: 13px; color: #9DAAB2; margin: 0; }
 
 .kpi-row { display: flex; gap: 16px; margin-bottom: 24px; }
 .kpi-card {
@@ -86,14 +96,16 @@ section[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.12) !impo
 .kpi-card.vert   { border-top-color: #1E8449; }
 .kpi-card.jaune  { border-top-color: #D4AC0D; }
 .kpi-card.bleu   { border-top-color: #2471A3; }
+.kpi-card.violet { border-top-color: #7D3C98; }
 .kpi-value { font-size: 30px; font-weight: 600; color: #1A2533; line-height: 1; }
 .kpi-unit  { font-size: 14px; font-weight: 400; color: #7F8C8D; margin-left: 3px; }
 .kpi-label { font-size: 12px; color: #7F8C8D; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 6px; }
 
+/* PAGE 1 & 2 FIX: sous-titres gris pâle agrandis */
 .section-title {
-    font-size: 13px; font-weight: 600;
+    font-size: 15px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.1em;
-    color: #7F8C8D; margin: 32px 0 12px 0;
+    color: #566573; margin: 32px 0 12px 0;
     padding-bottom: 8px; border-bottom: 1px solid #E5E8EC;
 }
 
@@ -146,13 +158,32 @@ section[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.12) !impo
 }
 .filter-badge.jaune { background: #D4AC0D; }
 
+/* Tooltip KPI card */
+.kpi-card-wrapper { position: relative; }
+.kpi-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1A2533;
+    color: white;
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    max-width: 260px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.5;
+}
+.kpi-card-wrapper:hover .kpi-tooltip { display: block; }
+
 /* ── Fond blanc global ── */
 [data-testid="stAppViewContainer"] { background: #ffffff; }
 
-/* ── PAGE BLANCHE instantanée au changement de page ─────────────────────
-   Streamlit met aria-busy="true" ET data-stale sur les éléments pendant
-   le rendu. On masque tout le contenu visible immédiatement avec un
-   overlay blanc + spinner CSS, sans attendre que les composants se vident. */
 [data-testid="stMainBlockContainer"] { position: relative; }
 
 /* Overlay blanc plein écran */
@@ -179,13 +210,10 @@ section[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.12) !impo
 }
 @keyframes spin-page { to { transform: rotate(360deg); } }
 
-/* Masquer aussi les éléments grisés (stale) qui dépassent l'overlay */
 [data-stale="true"] { opacity: 0 !important; pointer-events: none !important; }
 
-/* Folium iframes — fond blanc */
 .element-container iframe { background: #ffffff !important; border: none !important; }
 
-/* Squelettes Streamlit */
 [data-testid="stSkeleton"] { background: #f0f2f6 !important; opacity: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -204,7 +232,7 @@ def load_reseau():
 
 @st.cache_data(show_spinner=False)
 def load_bixi_csv():
-    return pd.read_csv("bixi.csv")
+    return load_bixi_live()
 
 @st.cache_data(show_spinner=False, ttl=300)
 def load_bixi_live():
@@ -237,9 +265,8 @@ def load_accidents():
             gdf = _normalise_gravite(gdf)
         return gdf
 
-    # ── Chemin CSV (pas de parquet pré-calculé) ──────────────────────────
     gdf_r = load_reseau()
-    df_c  = pd.read_csv("collisions_routieres (1).csv", low_memory=False)
+    df_c  = pd.read_csv(URL_ACCIDENTS, low_memory=False)
     df_2021 = df_c[
         (df_c["AN"] == 2021) &
         (df_c["NB_VICTIMES_VELO"] > 0) &
@@ -247,7 +274,6 @@ def load_accidents():
         df_c["LOC_LONG"].notna()
     ].copy()
 
-    # Reset index propre AVANT le sjoin pour éviter les doublons d'index
     df_2021 = df_2021.reset_index(drop=True)
 
     gdf_acc   = gpd.GeoDataFrame(
@@ -258,7 +284,6 @@ def load_accidents():
     gdf_acc_m = gdf_acc.to_crs("EPSG:32618")
     gdf_r_m   = gdf_r.to_crs("EPSG:32618")
 
-    # sjoin_nearest — on ajoute index_left pour dédupliquer ensuite
     gdf_joined = gpd.sjoin_nearest(
         gdf_acc_m,
         gdf_r_m[["geometry", "TYPE_VOIE_DESC", "NOM_ARR_VILLE_DESC"]],
@@ -266,7 +291,6 @@ def load_accidents():
         distance_col="dist_piste_m",
     )
 
-    # Supprimer les doublons créés par sjoin (1 accident = 1 ligne)
     gdf_joined = gdf_joined[~gdf_joined.index.duplicated(keep="first")].copy()
 
     gdf_joined["classification"] = gdf_joined["dist_piste_m"].apply(
@@ -277,24 +301,16 @@ def load_accidents():
 
 
 def _normalise_gravite(gdf):
-    """
-    Normalise GRAVITE vers 4 valeurs standard.
-    Couvre toutes les variantes trouvées dans collisions_routieres.csv (SAAQ).
-    """
     mapping = {
-        # ── Valeurs exactes du CSV SAAQ ──────────────────────────────────
         "Mortel":                                           "Mortel",
         "Blessé grave":                                     "Blessé grave",
         "Blessé léger":                                     "Blessé léger",
         "Dommages matériels seulement":                     "Dommages matériels seulement",
-        # Valeur spéciale SAAQ pour accidents sans rapport obligatoire
         "Dommages matériels inférieurs au seuil de rapportage": "Dommages matériels seulement",
-        # ── Codes numériques SAAQ ────────────────────────────────────────
         "1": "Mortel",         1: "Mortel",
         "2": "Blessé grave",   2: "Blessé grave",
         "3": "Blessé léger",   3: "Blessé léger",
         "4": "Dommages matériels seulement", 4: "Dommages matériels seulement",
-        # ── Variantes sans accents ───────────────────────────────────────
         "Blesse grave":                    "Blessé grave",
         "Blesse leger":                    "Blessé léger",
         "Blesse léger":                    "Blessé léger",
@@ -304,7 +320,6 @@ def _normalise_gravite(gdf):
         "Dommages matériels":              "Dommages matériels seulement",
         "Dom. matériels":                  "Dommages matériels seulement",
         "Dom. materiels":                  "Dommages matériels seulement",
-        # ── Autres formes courtes ────────────────────────────────────────
         "Mortel(le)": "Mortel",
         "Grave":      "Blessé grave",
         "Léger":      "Blessé léger",
@@ -321,7 +336,7 @@ def _normalise_gravite(gdf):
 def load_compteurs():
     if os.path.exists("data/compteurs_agg.parquet"):
         return pd.read_parquet("data/compteurs_agg.parquet")
-    df = pd.read_csv("Compteurs cyclistes permanents.csv", low_memory=False)
+    df = pd.read_csv(URL_COMPTEURS, low_memory=False)
     df = df.dropna(subset=["latitude", "longitude", "vitesseMoyenne"])
     df = df[
         df["latitude"].between(45.4, 45.7) &
@@ -416,7 +431,6 @@ def make_legende(items, titre="Légende"):
     </div>"""
 
 def make_base_map(zoom=12):
-    """Crée une carte Folium avec fond CartoDB nommé proprement."""
     m = folium.Map(
         location=[45.5088, -73.5878],
         zoom_start=zoom,
@@ -431,10 +445,6 @@ def make_base_map(zoom=12):
     return m
 
 def render_map(m, height=480):
-    """
-    Affiche une carte Folium via st.components pour éviter le flash grisé
-    de st_folium. La carte est pré-rendue en HTML avant d'être injectée.
-    """
     html = m._repr_html_()
     components.html(html, height=height, scrolling=False)
 
@@ -543,8 +553,6 @@ if "page_precedente" not in st.session_state:
 page_changed = st.session_state["page_precedente"] != page
 st.session_state["page_precedente"] = page
 
-# Injecter un token de page dans le DOM pour que le CSS sache quelle page est active
-# Le CSS ci-dessus cache tout le contenu stale et affiche un spinner centré
 st.markdown(
     f'<div id="page-token" data-page="{page}" style="display:none;"></div>',
     unsafe_allow_html=True,
@@ -560,7 +568,6 @@ if page == "Réseau et Cadrage":
     st.markdown("""
     <div class="page-header">
       <h1>Réseau cyclable de Montréal</h1>
-      <p>Visualisation du réseau et cadrage méthodologique du projet</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -596,6 +603,18 @@ if page == "Réseau et Cadrage":
 
     st.markdown('<div class="section-title">Aperçu du réseau</div>', unsafe_allow_html=True)
 
+    # PAGE 1 FIX: note explicative sur la différence piste vs bande
+    st.markdown("""
+    <div style="background:#EBF5FB;border-left:3px solid #2471A3;border-radius:0 6px 6px 0;
+    padding:12px 16px;margin-bottom:18px;font-size:13px;color:#1A2533;line-height:1.7;">
+      <b>ℹ️ Note :</b> Le réseau cyclable total inclut plusieurs types d'infrastructures qui se distinguent par leur niveau de protection.
+      Une <b>piste cyclable</b> est une voie <em>séparée physiquement</em> de la circulation automobile (trottoir, bollards, surélévation).
+      Une <b>bande cyclable</b> est une voie <em>marquée au sol</em> sur la chaussée, sans séparation physique.
+      D'autres types (chaussée désignée, voie partagée) s'ajoutent pour former le total du réseau.
+      La somme des km de pistes et de bandes est donc inférieure au total du réseau.
+    </div>
+    """, unsafe_allow_html=True)
+
     try:
         gdf_m = gdf_reseau.to_crs("EPSG:32618")
         gdf_reseau["longueur_m"] = gdf_m.geometry.length
@@ -614,13 +633,35 @@ if page == "Réseau et Cadrage":
     with col1:
         v = f"{lon_total:.0f}" if lon_total else str(len(gdf_reseau))
         u = "km total" if lon_total else "tronçons"
-        st.markdown(f'<div class="kpi-card bleu"><div class="kpi-value">{v}<span class="kpi-unit">{u}</span></div><div class="kpi-label">Réseau cyclable</div></div>', unsafe_allow_html=True)
+        # PAGE 1 FIX: couleur violet pour ne pas confondre avec les couleurs de la carte
+        st.markdown(
+            f'<div class="kpi-card-wrapper">'
+            f'<div class="kpi-card violet"><div class="kpi-value">{v}<span class="kpi-unit">{u}</span></div>'
+            f'<div class="kpi-label">Réseau cyclable</div></div>'
+            f'<div class="kpi-tooltip">Total de tous les types de voies cyclables combinés : pistes, bandes, chaussées désignées et voies partagées.</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
     with col2:
         v = f"{lon_piste:.0f}" if lon_piste else "—"
-        st.markdown(f'<div class="kpi-card vert"><div class="kpi-value">{v}<span class="kpi-unit">km</span></div><div class="kpi-label">Pistes cyclables</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="kpi-card-wrapper">'
+            f'<div class="kpi-card vert"><div class="kpi-value">{v}<span class="kpi-unit">km</span></div>'
+            f'<div class="kpi-label">Pistes cyclables</div></div>'
+            f'<div class="kpi-tooltip">Voies séparées physiquement de la circulation (trottoir surélevé, bollards, séparateurs). Niveau de protection le plus élevé.</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
     with col3:
         v = f"{lon_bande:.0f}" if lon_bande else "—"
-        st.markdown(f'<div class="kpi-card bleu"><div class="kpi-value">{v}<span class="kpi-unit">km</span></div><div class="kpi-label">Bandes cyclables</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="kpi-card-wrapper">'
+            f'<div class="kpi-card bleu"><div class="kpi-value">{v}<span class="kpi-unit">km</span></div>'
+            f'<div class="kpi-label">Bandes cyclables</div></div>'
+            f'<div class="kpi-tooltip">Voies marquées au sol sur la chaussée, sans séparation physique avec les voitures. Protection moindre qu\'une piste.</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="section-title">Carte du réseau cyclable</div>', unsafe_allow_html=True)
@@ -635,8 +676,10 @@ if page == "Réseau et Cadrage":
         ),
     ).add_to(m1)
     m1.get_root().html.add_child(folium.Element(make_legende([
+        ("#C0392B", "Réseau express vélo (REV)"),
         ("#1E8449", "Piste cyclable"),
         ("#2471A3", "Bande cyclable"),
+        ("#1A5276", "Chaussée désignée"),
         ("#AAB7B8", "Autre"),
     ], "Type de voie")))
     render_map(m1, height=540)
@@ -648,20 +691,17 @@ if page == "Réseau et Cadrage":
 elif page == "Analyse de Sécurité":
   with st.spinner("Chargement de la page…"):
 
-    # ── Init session state filtres ──────────────────────────────────────────
     for key in ["p2_arrondissement", "p2_gravite", "p2_classif",
                 "p2_last_donut", "p2_last_grav", "p2_last_arr"]:
         if key not in st.session_state:
             st.session_state[key] = None
 
-    # ── Header ──────────────────────────────────────────────────────────────
     st.markdown("""
     <div class="page-header">
       <h1>Analyse de sécurité — Accidents vélo 2021</h1>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Bandeau filtres actifs + Reset ──────────────────────────────────────
     filtres_actifs = {
         k: v for k, v in {
             "Arrondissement": st.session_state["p2_arrondissement"],
@@ -700,7 +740,6 @@ elif page == "Analyse de Sécurité":
                 st.session_state["p2_last_arr"]       = None
                 st.rerun()
 
-    # ── Fallback filtres manuels si pas de streamlit-plotly-events ──────────
     if not HAS_EVENTS:
         st.warning(
             "**Filtrage par clic désactivé.** "
@@ -734,14 +773,12 @@ elif page == "Analyse de Sécurité":
                                   key="sel_cl_fb")
             st.session_state["p2_classif"] = None if sel_cl == "(Tous)" else sel_cl
 
-    # ── Appliquer les filtres ────────────────────────────────────────────────
     grav_map_inv = {
         "Blessé léger":  "Blessé léger",
         "Blessé grave":  "Blessé grave",
         "Mortel":        "Mortel",
     }
 
-    # ── Base de données propre (index unique garanti par load_accidents) ────
     gdf_base     = gdf_joined.copy()
     gdf_base_wgs = gdf_joined_wgs.copy()
 
@@ -767,11 +804,11 @@ elif page == "Analyse de Sécurité":
         df_f     = df_f[mask3]
         df_f_wgs = df_f_wgs[mask3]
 
-    # KPIs filtrés
     n_total   = len(df_f)
     counts_f  = df_f["classification"].value_counts()
     n_sur     = counts_f.get("Sur piste",  0)
     n_hor     = counts_f.get("Hors piste", 0)
+    # PAGE 2 FIX: "Hors réseau cyclable" au lieu de "Hors infrastructure"
     pct_hor_f = n_hor / n_total * 100 if n_total > 0 else 0
     is_filtered = bool(filtres_actifs)
     badge = (
@@ -780,20 +817,19 @@ elif page == "Analyse de Sécurité":
         if is_filtered else ""
     )
 
-    # ── KPIs ────────────────────────────────────────────────────────────────
     st.markdown(f"""
     <div class="kpi-row">
       <div class="kpi-card rouge">
         <div class="kpi-value">{n_hor:,}</div>
         <div class="kpi-label">Accidents hors piste{badge}</div>
       </div>
-      <div class="kpi-card vert">
+      <div class="kpi-card jaune">
         <div class="kpi-value">{n_sur:,}</div>
         <div class="kpi-label">Accidents sur piste{badge}</div>
       </div>
-      <div class="kpi-card jaune">
+      <div class="kpi-card bleu">
         <div class="kpi-value">{pct_hor_f:.1f}<span class="kpi-unit">%</span></div>
-        <div class="kpi-label">Hors infrastructure{badge}</div>
+        <div class="kpi-label">Hors réseau cyclable{badge}</div>
       </div>
       <div class="kpi-card bleu">
         <div class="kpi-value">{n_total:,}</div>
@@ -802,18 +838,9 @@ elif page == "Analyse de Sécurité":
     </div>
     """, unsafe_allow_html=True)
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # CARTE FILTRÉE — directement sous les KPIs
-    # ═══════════════════════════════════════════════════════════════════════
-    n_affiche  = len(df_f_wgs)
-    badge_carte = (
-        f" — {n_affiche:,} accidents affichés"
-        + (" (filtré)" if is_filtered else "")
-    )
-
+    # PAGE 2 FIX: titre de carte sans le nombre d'accidents
     st.markdown(
-        f'<div class="section-title">Carte des accidents — Sur piste vs Hors piste'
-        f'{badge_carte}</div>',
+        '<div class="section-title">Carte des accidents — Sur piste vs Hors piste</div>',
         unsafe_allow_html=True
     )
 
@@ -822,14 +849,15 @@ elif page == "Analyse de Sécurité":
 
     fg_sur = folium.FeatureGroup(name="✅ Accidents sur piste",  show=True)
     fg_hor = folium.FeatureGroup(name="⚠️ Accidents hors piste", show=True)
-    couleurs_acc = {"Sur piste": "#1E8449", "Hors piste": "#C0392B"}
+    # Page 2 FIX: orange pour "sur piste" (plus neutre que vert qui suggère "sécuritaire")
+    couleurs_acc = {"Sur piste": "#E67E22", "Hors piste": "#C0392B"}
 
     MAX_PTS = 2000
     df_map = df_f_wgs.copy()
     if len(df_map) > MAX_PTS:
         df_map = df_map.sample(MAX_PTS, random_state=42)
         st.caption(
-            f"⚠️ Carte : {MAX_PTS} points affichés sur {n_affiche:,} "
+            f"⚠️ Carte : {MAX_PTS} points affichés sur {len(df_f_wgs):,} "
             f"(échantillon aléatoire représentatif)"
         )
 
@@ -856,17 +884,13 @@ elif page == "Analyse de Sécurité":
     fg_hor.add_to(m2)
     folium.LayerControl(position="topright", collapsed=True).add_to(m2)
     m2.get_root().html.add_child(folium.Element(make_legende([
-        ("#1E8449", f"Sur piste — {n_sur} ({100 - pct_hor_f:.1f}%)"),
+        ("#E67E22", f"Sur piste — {n_sur} ({100 - pct_hor_f:.1f}%)"),
         ("#C0392B", f"Hors piste — {n_hor} ({pct_hor_f:.1f}%)"),
     ], "Accidents vélo 2021")))
     render_map(m2, height=480)
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # GRAPHIQUES — Gravité + Top 10 arrondissements (côte à côte)
-    # ═══════════════════════════════════════════════════════════════════════
     col_b, col_d = st.columns(2)
 
-    # ── Graphique à barres — Gravité ─────────────────────────────────────────
     with col_b:
         st.markdown(
             '<div class="section-title">Gravité des accidents'
@@ -875,7 +899,6 @@ elif page == "Analyse de Sécurité":
             unsafe_allow_html=True
         )
 
-        # Seulement les 3 gravités corporelles — dommages matériels exclus
         ordre_gravite = ["Blessé léger", "Blessé grave", "Mortel"]
 
         rows_grav = []
@@ -888,7 +911,8 @@ elif page == "Analyse de Sécurité":
         sel_grav_court = st.session_state["p2_gravite"]
 
         fig_grav = go.Figure()
-        couleurs_classif = {"Sur piste": "#1E8449", "Hors piste": "#C0392B"}
+        # PAGE 2 FIX: deux bleus distincts (foncé/pâle) — neutres, sans connotation carte
+        couleurs_classif = {"Sur piste": "#2471A3", "Hors piste": "#85C1E9"}
 
         for classif in ["Hors piste", "Sur piste"]:
             sub = gravite_df[gravite_df["Classification"] == classif]
@@ -963,7 +987,6 @@ elif page == "Analyse de Sécurité":
         else:
             st.plotly_chart(fig_grav, use_container_width=True)
 
-    # ── Top 10 arrondissements — ordre décroissant ───────────────────────────
     with col_d:
         st.markdown(
             '<div class="section-title">Top 10 arrondissements'
@@ -972,7 +995,6 @@ elif page == "Analyse de Sécurité":
             unsafe_allow_html=True
         )
 
-        # Base dédupliquée, filtrée par gravité et classif si actifs
         df_arr_base = gdf_base.copy()
         if st.session_state["p2_gravite"]:
             grav_long_arr = grav_map_inv.get(
@@ -985,7 +1007,6 @@ elif page == "Analyse de Sécurité":
                 df_arr_base["classification"] == st.session_state["p2_classif"]
             ]
 
-        # Compter par arrondissement — valeurs réelles
         arr_series = (
             df_arr_base["NOM_ARR_VILLE_DESC"]
             .dropna()
@@ -997,12 +1018,12 @@ elif page == "Analyse de Sécurité":
             .reset_index()
         )
         arr_counts.columns = ["Arrondissement", "Accidents"]
-        # ascending=True pour que le pire soit en haut dans le graphe horizontal
         arr_counts = arr_counts.sort_values("Accidents", ascending=True)
 
         sel_arr = st.session_state["p2_arrondissement"]
+        # PAGE 2 FIX: couleur neutre (bleu ardoise) au lieu de rouge pour le diagramme à barres
         bar_colors = [
-            "#1A5276" if r["Arrondissement"] == sel_arr else "#C0392B"
+            "#1A5276" if r["Arrondissement"] == sel_arr else "#2E4057"
             for _, r in arr_counts.iterrows()
         ]
         bar_opacity = [
@@ -1070,9 +1091,6 @@ elif page == "Analyse de Sécurité":
         else:
             st.plotly_chart(fig_arr, use_container_width=True)
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # CARTE DE CHALEUR COMPTEURS
-    # ═══════════════════════════════════════════════════════════════════════
     st.markdown(
         '<div class="section-title">Carte de chaleur — Vitesse moyenne des compteurs</div>',
         unsafe_allow_html=True
@@ -1151,11 +1169,9 @@ elif page == "Aide à la Décision":
     st.markdown("""
     <div class="page-header">
       <h1>Aide à la décision</h1>
-      <p>Recommandations concrètes pour la Ville de Montréal — sécurité et nouvelles infrastructures</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Chargement résultats routing ────────────────────────────────────────
     try:
         df_trajets_p3 = pd.read_csv("page3_resultats_trajets.csv")
         has_trajets_p3 = True
@@ -1171,7 +1187,6 @@ elif page == "Aide à la Décision":
         has_rues = False
         df_rues_candidates = pd.DataFrame()
 
-    # ── Géocodage inverse (cache) ────────────────────────────────────────────
     @st.cache_data(show_spinner=False)
     def reverse_geocode(lat, lon):
         try:
@@ -1194,14 +1209,11 @@ elif page == "Aide à la Décision":
         except Exception:
             return "Rue inconnue", ""
 
-    # ════════════════════════════════════════════
-    # SECTION 1 — SÉCURITÉ
-    # ════════════════════════════════════════════
     st.markdown("""
-    <div style="background:#FEF9F9;border-left:4px solid #C0392B;border-radius:0 8px 8px 0;
+    <div style="background:#EBF2FA;border-left:4px solid #1A5276;border-radius:0 8px 8px 0;
     padding:14px 20px;margin:24px 0 20px 0;">
-      <div style="font-size:16px;font-weight:600;color:#922B21;margin-bottom:4px;">
-        🔴 Volet 1 — Sécurité des cyclistes
+      <div style="font-size:16px;font-weight:600;color:#1A2533;margin-bottom:4px;">
+        Volet 1 — Sécurité des cyclistes
       </div>
       <div style="font-size:13px;color:#7F8C8D;">
         Interventions prioritaires basées sur les collisions SAAQ 2021 · Sur piste et hors piste
@@ -1209,36 +1221,74 @@ elif page == "Aide à la Décision":
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Accidents SUR piste ──────────────────────────────────────────────────
+    # ── ZONES À RISQUE SUR PISTE ────────────────────────────────────────────
     st.markdown(
         '<div class="section-title">Zones à risque sur piste existante</div>',
         unsafe_allow_html=True
     )
-    st.markdown(f"""
-    <p style="font-size:14px;color:#566573;margin-bottom:16px;">
-      <b>{acc_sur:,} accidents</b> ({100 - pct_hor:.1f}%) se produisent <em>sur</em>
-      ou à moins de 15 m d'une piste.
-      Cela indique des problèmes de <b>conception, signalisation ou conflits aux intersections</b>
-      indépendamment de la présence d'infrastructure.
-    </p>
-    """, unsafe_allow_html=True)
 
     nb_mortels_sur = int(gdf_joined[
         (gdf_joined["classification"] == "Sur piste") &
         (gdf_joined["GRAVITE"] == "Mortel")
     ].shape[0])
 
-    pct_graves_sur = nb_mortels_sur / acc_sur * 100 if acc_sur > 0 else 0
-
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         st.markdown(f'<div class="kpi-card rouge"><div class="kpi-value">{acc_sur:,}</div><div class="kpi-label">Accidents sur piste</div></div>', unsafe_allow_html=True)
     with col2:
         st.markdown(f'<div class="kpi-card rouge"><div class="kpi-value">{nb_mortels_sur}</div><div class="kpi-label">Dont mortels</div></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown(f'<div class="kpi-card jaune"><div class="kpi-value">{pct_graves_sur:.1f}<span class="kpi-unit">%</span></div><div class="kpi-label">Taux de mortalité sur piste</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # PAGE 4 FIX: Recommandation 1 — top 5 intersections à auditer calculées depuis les données sur piste
+    # Calcul des 5 zones sur piste les plus accidentogènes (groupby lat/lon arrondi)
+    gdf_sur_wgs = gdf_joined_wgs[gdf_joined_wgs["classification"] == "Sur piste"].copy()
+    gdf_sur_wgs["lat_g"] = (gdf_sur_wgs.geometry.y * 200).round() / 200
+    gdf_sur_wgs["lon_g"] = (gdf_sur_wgs.geometry.x * 200).round() / 200
+    top5_intersections = (
+        gdf_sur_wgs.groupby(["lat_g", "lon_g"])
+        .agg(nb=("GRAVITE", "count"), graves=("GRAVITE", lambda x: x.isin(["Mortel", "Blessé grave"]).sum()))
+        .reset_index()
+        .sort_values("nb", ascending=False)
+        .head(5)
+        .reset_index(drop=True)
+    )
+    top5_html_rows = ""
+    for idx_t, row_t in top5_intersections.iterrows():
+        rue_t, qrt_t = reverse_geocode(row_t["lat_g"], row_t["lon_g"])
+        lieu = f"{rue_t}" + (f", {qrt_t}" if qrt_t else "")
+        grave_txt = f' · <span style="color:#C0392B;font-weight:600;">{int(row_t["graves"])} graves</span>' if row_t["graves"] > 0 else ""
+        top5_html_rows += (
+            f'<tr><td style="padding:6px 10px;font-weight:600;color:#1A5276;">#{idx_t+1}</td>'
+            f'<td style="padding:6px 10px;">{lieu}</td>'
+            f'<td style="padding:6px 10px;text-align:center;">{int(row_t["nb"])}{grave_txt}</td></tr>'
+        )
+
+    st.markdown(f"""
+    <div class="reco-card" style="border-left-color:#1A5276;">
+      <div class="reco-title">Recommandation 1 — Auditer les intersections à haute sinistralité sur piste</div>
+      <div class="reco-body">
+        Malgré la présence d'une piste cyclable, <b>{acc_sur:,} accidents</b> se sont produits
+        à moins de 15 m d'une infrastructure. Ce phénomène s'explique principalement par des
+        <b>conflits aux intersections</b> : virages non protégés, angles morts pour les camions,
+        feux non adaptés aux cyclistes. La recommandation est d'effectuer un audit terrain
+        des 5 intersections ci-dessous, puis d'y installer des <b>avances cyclistes</b>,
+        des <b>sas vélo</b> aux feux rouges et des <b>déflecteurs physiques</b>.<br><br>
+        <b>Top 5 intersections à auditer en priorité :</b><br>
+        <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;">
+          <thead>
+            <tr style="background:#F0F3F6;">
+              <th style="padding:6px 10px;text-align:left;color:#7F8C8D;font-weight:600;">Rang</th>
+              <th style="padding:6px 10px;text-align:left;color:#7F8C8D;font-weight:600;">Lieu</th>
+              <th style="padding:6px 10px;text-align:center;color:#7F8C8D;font-weight:600;">Accidents</th>
+            </tr>
+          </thead>
+          <tbody>{top5_html_rows}</tbody>
+        </table>
+      </div>
+      <div class="reco-meta">Source : Collisions SAAQ 2021 — accidents à ≤ 15 m d'une piste cyclable · géocodage Nominatim</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     actions_sec = [
         "Séparateurs physiques + signalisation renforcée",
@@ -1250,72 +1300,48 @@ elif page == "Aide à la Décision":
         rue, qrt = reverse_geocode(row["lat_grid"], row["lon_grid"])
         top3_rues_sec.append((rue, qrt, row))
 
+    # PAGE 4 FIX: toutes les recommandations en navy — couleur neutre, pas de connotation bon/mauvais
+    couleurs_rec = ["navy", "navy", "navy"]
     for i, (rue, qrt, row) in enumerate(top3_rues_sec):
         stn = row.get("station", "—")
         if isinstance(stn, float):
             stn = "—"
-        couleur_i = "rouge" if i == 0 else "jaune"
         st.markdown(f"""
-        <div class="reco-card {couleur_i}">
-          <div class="reco-title">S{i+2} — {rue} {f"({qrt})" if qrt else ""}</div>
+        <div class="reco-card {couleurs_rec[i]}">
+          <div class="reco-title">Recommandation {i+2} — {rue} {f"({qrt})" if qrt else ""}</div>
           <div class="reco-body">
-            <b>{row['nb_accidents']} accidents</b> hors infrastructure dans ce secteur,
+            <b>{row['nb_accidents']} accidents</b> hors réseau cyclable dans ce secteur,
             dont <b style="color:#C0392B">{row['nb_graves']} graves ou mortels</b>.
-            Station Bixi à proximité : <b>{stn}</b> — indique un fort flux cycliste non protégé.<br><br>
+            Station Bixi à proximité : <b>{stn}</b> — confirme un fort flux cycliste non protégé.<br><br>
             <b>Action recommandée :</b> {actions_sec[i]}
           </div>
           <div class="reco-meta">Score composite : {row['score']} · SAAQ 2021 + Bixi live</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # ── Accidents HORS piste ─────────────────────────────────────────────────
+    # ── CARTE POINTS NOIRS ───────────────────────────────────────────────────
     st.markdown(
-        '<div class="section-title">Zones à risque hors infrastructure</div>',
+        '<div class="section-title">Carte — Points noirs de sécurité</div>',
         unsafe_allow_html=True
     )
-
-    nb_mortels_hor = int(gdf_joined[
-        (gdf_joined["classification"] == "Hors piste") &
-        (gdf_joined["GRAVITE"] == "Mortel")
-    ].shape[0])
-
-    pct_mortels_hor = nb_mortels_hor / acc_hor * 100 if acc_hor > 0 else 0
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f'<div class="kpi-card rouge"><div class="kpi-value">{acc_hor:,}</div><div class="kpi-label">Accidents hors piste</div></div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown(f'<div class="kpi-card rouge"><div class="kpi-value">{nb_mortels_hor}</div><div class="kpi-label">Dont mortels</div></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown(f'<div class="kpi-card rouge"><div class="kpi-value">{pct_mortels_hor:.1f}<span class="kpi-unit">%</span></div><div class="kpi-label">Taux de mortalité hors piste</div></div>', unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── Recommandation S1 ────────────────────────────────────────────────────
+    # PAGE 4 FIX: note explicative reliant les recommandations à la carte
     st.markdown("""
-    <div class="reco-card rouge">
-      <div class="reco-title">S1 — Auditer les intersections à haute sinistralité sur piste</div>
-      <div class="reco-body">
-        Les accidents sur piste révèlent des points noirs d'intersection (virages non protégés, conflits
-        avec tourne-à-gauche, mauvaise visibilité). Recommandation : installer des <b>avances cyclistes</b>,
-        des <b>sas vélo</b> aux feux et des <b>déflecteurs physiques</b> aux angles de rues les plus touchés.
-      </div>
-      <div class="reco-meta">Source : Collisions SAAQ 2021 — accidents à ≤ 15 m d'une piste</div>
-    </div>
+    <p style="font-size:13px;color:#566573;margin-bottom:12px;">
+      Les marqueurs numérotés correspondent aux <b>Recommandations 2, 3 et 4</b> ci-dessus
+      (zones hors réseau cyclable à fort achalandage Bixi).
+      Les couleurs des marqueurs suivent le même ordre de priorité : 
+      <span style="color:#C0392B;font-weight:600;">■ Rouge = Recommandation 2</span> (priorité 1),
+      <span style="color:#E67E22;font-weight:600;">■ Orange = Recommandation 3</span>,
+      <span style="color:#1A5276;font-weight:600;">■ Bleu = Recommandation 4</span>.
+    </p>
     """, unsafe_allow_html=True)
-
-    # Carte sécurité
-    st.markdown(
-        '<div class="section-title">Carte — Points noirs de sécurité (sur et hors piste)</div>',
-        unsafe_allow_html=True
-    )
 
     m_sec = make_base_map()
     folium.GeoJson(gdf_reseau, name="Réseau cyclable", style_function=style_reseau_fond, control=False).add_to(m_sec)
 
     fg_sur_acc  = folium.FeatureGroup(name="🟠 Accidents sur piste",       show=True)
     fg_hor_acc  = folium.FeatureGroup(name="🔴 Accidents hors piste",      show=True)
-    fg_top3_sec = folium.FeatureGroup(name="📍 Top 3 zones prioritaires",  show=True)
+    fg_top3_sec = folium.FeatureGroup(name="📍 Recommandations 2, 3 et 4", show=True)
 
     for _, row in gdf_joined_wgs.iterrows():
         cl   = row["classification"]
@@ -1326,7 +1352,8 @@ elif page == "Aide à la Décision":
             tooltip=f"{cl} — {row.get('GRAVITE','?')}",
         ).add_to(fg_hor_acc if cl == "Hors piste" else fg_sur_acc)
 
-    icones_sec = ["red", "orange", "blue"]
+    # PAGE 4 FIX: cohérence des couleurs rouge/orange/bleu avec les reco cards
+    icones_sec_couleurs = ["red", "orange", "blue"]
     for i, (rue, qrt, row) in enumerate(top3_rues_sec):
         stn = row.get("station", "—")
         if isinstance(stn, float):
@@ -1337,7 +1364,7 @@ elif page == "Aide à la Décision":
         )
         popup_html = (
             f"<div style='font-family:sans-serif;font-size:13px;min-width:220px;'>"
-            f"<b style='color:#C0392B'>Zone prioritaire #{i+1}</b><br>"
+            f"<b style='color:#C0392B'>Recommandation {i+2}</b><br>"
             f"<b>{rue}</b> {qrt_span}<br><br>"
             f"<b>{row['nb_accidents']}</b> accidents · "
             f"<b style='color:#C0392B'>{row['nb_graves']} graves</b><br>"
@@ -1348,10 +1375,10 @@ elif page == "Aide à la Décision":
         folium.Marker(
             location=[row["lat_grid"], row["lon_grid"]],
             icon=folium.Icon(
-                color=icones_sec[i], icon="warning-sign", prefix="glyphicon"
+                color=icones_sec_couleurs[i], icon="warning-sign", prefix="glyphicon"
             ),
             popup=folium.Popup(popup_html, max_width=280),
-            tooltip=f"Zone #{i+1} — {rue} · {row['nb_accidents']} accidents",
+            tooltip=f"Recommandation {i+2} — {rue} · {row['nb_accidents']} accidents",
         ).add_to(fg_top3_sec)
 
     fg_hor_acc.add_to(m_sec)
@@ -1361,18 +1388,18 @@ elif page == "Aide à la Décision":
     m_sec.get_root().html.add_child(folium.Element(make_legende([
         ("#E74C3C", "Accident hors piste"),
         ("#E67E22", "Accident sur piste"),
-        ("#C0392B", "Zone prioritaire Top 3"),
+        ("#C0392B", "Recommandation 2 (priorité 1)"),
+        ("#E67E22", "Recommandation 3"),
+        ("#1A5276", "Recommandation 4"),
     ], "Sécurité cycliste")))
     render_map(m_sec, height=500)
 
-    # ════════════════════════════════════════════
-    # SECTION 2 — NOUVELLES INFRASTRUCTURES
-    # ════════════════════════════════════════════
+    # ── VOLET 2 — NOUVELLES INFRASTRUCTURES ─────────────────────────────────
     st.markdown("""
-    <div style="background:#F0F9F4;border-left:4px solid #1E8449;border-radius:0 8px 8px 0;
+    <div style="background:#EBF2FA;border-left:4px solid #1A5276;border-radius:0 8px 8px 0;
     padding:14px 20px;margin:40px 0 20px 0;">
-      <div style="font-size:16px;font-weight:600;color:#1A5276;margin-bottom:4px;">
-        🟢 Volet 2 — Nouvelles infrastructures cyclables
+      <div style="font-size:16px;font-weight:600;color:#1A2533;margin-bottom:4px;">
+        Volet 2 — Nouvelles infrastructures cyclables
       </div>
       <div style="font-size:13px;color:#7F8C8D;">
         Corridors Bixi à fort achalandage sans protection · Rues candidates à une nouvelle piste
@@ -1392,12 +1419,12 @@ elif page == "Aide à la Décision":
             "Bande cyclable avec séparateurs ou surélévation aux intersections",
             "Chaussée désignée avec signalisation renforcée + priorité cycliste aux feux",
         ]
-        medailles = ["🥇", "🥈", "🥉"]
+        rangs = ["Priorité 1", "Priorité 2", "Priorité 3"]
 
         for i, (_, row) in enumerate(top3_rues_infra.iterrows()):
             st.markdown(f"""
             <div class="reco-card navy">
-              <div class="reco-title">{medailles[i]} {row['nom_rue']}</div>
+              <div class="reco-title">{rangs[i]} — {row['nom_rue']}</div>
               <div class="reco-body">
                 <b>{int(row['passages_bixi']):,} passages Bixi</b> empruntent ce corridor
                 sans protection cyclable, sur <b>{row['longueur_totale_m']:.0f} m</b>
@@ -1407,7 +1434,7 @@ elif page == "Aide à la Décision":
                 <b>Action recommandée :</b> {types_action_infra[i]}
               </div>
               <div class="reco-meta">
-                Score : {row['score']:.1f} · Bixi Top {nb_trajets_p3} O-D + OSMnx routing
+                Score : {row['score']:.1f} · Bixi Top {nb_trajets_p3} Origine-Destination + OSMnx routing
               </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1426,6 +1453,28 @@ elif page == "Aide à la Décision":
                 "Score": "{:.1f}"
             }),
             use_container_width=True, height=380,
+            column_config={
+                "Rue": st.column_config.TextColumn(
+                    "Rue",
+                    help="Nom de la rue (OpenStreetMap) empruntée sans protection cyclable"
+                ),
+                "Passages Bixi": st.column_config.NumberColumn(
+                    "Passages Bixi",
+                    help="Nombre total de passages Bixi enregistrés sur ce corridor sans infrastructure cyclable"
+                ),
+                "Longueur exposée (m)": st.column_config.NumberColumn(
+                    "Longueur exposée (m)",
+                    help="Distance cumulée (en mètres) sans piste ni bande protégée sur cette rue"
+                ),
+                "Tronçons": st.column_config.NumberColumn(
+                    "Tronçons",
+                    help="Nombre de segments de rue distincts sans protection (graphe OSMnx)"
+                ),
+                "Score": st.column_config.NumberColumn(
+                    "Score",
+                    help="Score de priorité composite : 60 % passages Bixi normalisés + 40 % longueur exposée normalisée (sur 100)"
+                ),
+            }
         )
 
         st.markdown(
@@ -1446,9 +1495,11 @@ elif page == "Aide à la Décision":
         couleurs_infra = ["#1A5276", "#117A65", "#6C3483"]
         top3_noms = list(top3_rues_infra["nom_rue"])
 
+        rangs_map = ["Priorité 1", "Priorité 2", "Priorité 3"]
+
         if has_edges:
             for rank, nom_rue in enumerate(top3_noms):
-                fg_rue   = folium.FeatureGroup(name=f"{medailles[rank]} {nom_rue}", show=True)
+                fg_rue   = folium.FeatureGroup(name=f"{rangs_map[rank]} — {nom_rue}", show=True)
                 edges_rue = df_edges_map[
                     (~df_edges_map["protege"]) & (df_edges_map["nom_rue"] == nom_rue)
                 ]
@@ -1462,7 +1513,7 @@ elif page == "Aide à la Décision":
                             latlon,
                             color=couleurs_infra[rank],
                             weight=weight, opacity=0.85,
-                            tooltip=f"{medailles[rank]} {nom_rue} — {int(erow['occurrences'])} passages Bixi",
+                            tooltip=f"{rangs_map[rank]} — {nom_rue} · {int(erow['occurrences'])} passages Bixi",
                         ).add_to(fg_rue)
                     except Exception:
                         continue
@@ -1485,7 +1536,7 @@ elif page == "Aide à la Décision":
 
             popup_html = (
                 f"<div style='font-family:sans-serif;font-size:13px;min-width:230px;'>"
-                f"<b style='color:{couleurs_infra[rank]}'>{medailles[rank]} {row['nom_rue']}</b><br><br>"
+                f"<b style='color:{couleurs_infra[rank]}'>{rangs_map[rank]} — {row['nom_rue']}</b><br><br>"
                 f"Passages Bixi : <b>{int(row['passages_bixi']):,}</b><br>"
                 f"Longueur exposée : <b>{row['longueur_totale_m']:.0f} m</b><br>"
                 f"Score : <b>{row['score']:.1f}</b><br>"
@@ -1495,22 +1546,21 @@ elif page == "Aide à la Décision":
             folium.Marker(
                 location=[lat_c, lon_c],
                 icon=folium.Icon(
-                    color=["blue", "green", "purple"][rank],
+                    color=["blue", "darkblue", "cadetblue"][rank],
                     icon="road", prefix="glyphicon"
                 ),
                 popup=folium.Popup(popup_html, max_width=280),
-                tooltip=f"{medailles[rank]} {row['nom_rue']}",
+                tooltip=f"{rangs_map[rank]} — {row['nom_rue']}",
             ).add_to(m_infra)
 
         folium.LayerControl(position="topright", collapsed=True).add_to(m_infra)
-        legende_items = [(couleurs_infra[i], f"{medailles[i]} {top3_noms[i]}") for i in range(len(top3_noms))]
+        legende_items = [(couleurs_infra[i], f"{rangs_map[i]} — {top3_noms[i]}") for i in range(len(top3_noms))]
         legende_items.append(("#AAB7B8", "Réseau existant (fond)"))
         m_infra.get_root().html.add_child(
             folium.Element(make_legende(legende_items, "Corridors prioritaires"))
         )
         render_map(m_infra, height=520)
 
-    # ── Note méthodologique ──────────────────────────────────────────────────
     st.markdown("""
     <div style="margin-top:32px;background:#F4F6F7;border-radius:6px;
     padding:14px 18px;font-size:12px;color:#566573;line-height:1.8;border:1px solid #E5E8EC;">

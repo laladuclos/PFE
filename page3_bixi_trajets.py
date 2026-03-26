@@ -3,7 +3,7 @@ PAGE 3 — Déplacements Bixi & Analyse des tronçons sans infrastructure cyclab
 Auteurs : Laurie-Anne Duclos, Mathieu Couturier, Alexis Desjardins
 
 LOGIQUE :
-1. Top N paires O-D Bixi les plus fréquentes (CSV déjà agrégé)
+1. Top N paires Origine-Destination Bixi les plus fréquentes (CSV déjà agrégé)
 2. Routing OSMnx sur le graphe cyclable de Montréal pour chaque trajet
 3. Pour chaque edge traversé : est-il protégé via jointure spatiale (GeoJSON officiel MTL) + tags OSM ?
 4. On agrège par nom de rue (OSM) → total de passages Bixi hors infrastructure
@@ -50,10 +50,10 @@ def inject_css():
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap');
     html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; color: #1C2833; }
     .page-header { border-left: 4px solid #1A5276; padding: 10px 0 10px 18px; margin-bottom: 28px; }
-    .page-header h1 { font-family: 'DM Serif Display', serif; font-size: 28px; font-weight: 400; color: #1A2533; margin: 0 0 4px 0; }
-    .page-header p { font-size: 14px; color: #566573; margin: 0; }
-    .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
-        color: #7F8C8D; margin: 32px 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid #E5E8EC; }
+    .page-header h1 { font-family: 'DM Serif Display', serif; font-size: 36px; font-weight: 400; color: #1A2533; margin: 0 0 4px 0; }
+    .page-header p { font-size: 13px; color: #9DAAB2; margin: 0; }
+    .section-title { font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+        color: #566573; margin: 32px 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid #E5E8EC; }
     .kpi-row { display: flex; gap: 16px; margin-bottom: 24px; }
     .kpi-card { flex: 1; background: white; border: 1px solid #E5E8EC; border-radius: 8px;
         padding: 18px 22px; border-top: 3px solid #1A5276; }
@@ -137,7 +137,7 @@ def load_reseau():
 
 # ─── Top O-D ─────────────────────────────────────────────────────────────────
 
-@st.cache_data(show_spinner="Calcul du Top O-D...")
+@st.cache_data(show_spinner="Calcul du Top Origine-Destination...")
 def compute_top_od(_df, n=TOP_OD_PAIRS):
     needed = [
         "STARTSTATIONNAME", "ENDSTATIONNAME",
@@ -343,7 +343,6 @@ def analyse_rues_candidates(_df_edges):
         (agg["longueur_totale_m"] / max_l * 0.4)
     ).round(4) * 100
 
-    # Retourne top 10 (tableau) — la carte filtrera à 3
     return agg.sort_values("score", ascending=False).head(10).reset_index(drop=True)
 
 
@@ -390,9 +389,8 @@ def build_map_trajets(df_edges: pd.DataFrame, gdf_reseau, rues_candidates: pd.Da
         fg = fg_prot if row["protege"] else fg_nprot
         folium.PolyLine(coords, color=color, weight=weight, opacity=0.65, tooltip=tip).add_to(fg)
 
-    # ── Carte : seulement le TOP 3 (tableau garde top 10) ───────────────────
     if not rues_candidates.empty:
-        top3_noms       = set(rues_candidates.head(3)["nom_rue"])   # TOP 3 sur la carte
+        top3_noms       = set(rues_candidates.head(3)["nom_rue"])
         candidats_edges = df_edges[
             (~df_edges["protege"]) & (df_edges["nom_rue"].isin(top3_noms))
         ]
@@ -449,29 +447,16 @@ def render_page3():
     inject_css()
     import os
 
+    # PAGE 3 FIX: titre sans sous-titre non pertinent
     st.markdown("""
     <div class="page-header">
       <h1>Déplacements Bixi — Analyse d'infrastructure</h1>
-      <p>Routing des trajets les plus fréquents · Classification protégé / non protégé</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Source badge ────────────────────────────────────────────────────────
-    if os.path.exists("data/trajets_routes.parquet"):
-        st.markdown(
-            '<div style="font-size:12px;color:#1E8449;margin-bottom:16px;">'
-            '⚡ Données pré-calculées chargées depuis <code>data/</code> — affichage instantané'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.warning(
-            f"Fichiers pré-calculés introuvables. Calcul en direct "
-            f"(TOP_OD_PAIRS={TOP_OD_PAIRS}). "
-            "Lancez `python preprocess.py` pour accélérer en production."
-        )
+    # PAGE 3 FIX: suppression du badge "données pré-calculées chargées depuis data/"
+    # Chargement silencieux
 
-    # ── Chargement ──────────────────────────────────────────────────────────
     with st.spinner("Chargement du réseau cyclable officiel..."):
         gdf_reseau = load_reseau()
 
@@ -528,12 +513,12 @@ def render_page3():
         df_edges, df_trajets = route_top_od(G, od_df, protected_set)
         rues = analyse_rues_candidates(df_edges)
 
-    # ── KPI paires O-D ──────────────────────────────────────────────────────
+    # PAGE 3 FIX: "Paires Origine-Destination analysées" au lieu de "Paires O-D"
     st.markdown(f"""
     <div class="kpi-row">
       <div class="kpi-card bleu">
         <div class="kpi-value">{len(od_df)}</div>
-        <div class="kpi-label">Paires O-D analysées</div>
+        <div class="kpi-label">Paires Origine-Destination analysées</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -542,9 +527,9 @@ def render_page3():
         st.error("Impossible de charger les données de routing.")
         return
 
-    # ── Statistiques globales ───────────────────────────────────────────────
+    # PAGE 3 FIX: "Résultats du routing" renommé, moy. → moyenne au complet, réordonné
     st.markdown(
-        '<div class="section-title">Résultats du routing — Statistiques globales</div>',
+        '<div class="section-title">Résultats — Statistiques globales</div>',
         unsafe_allow_html=True,
     )
 
@@ -561,25 +546,28 @@ def render_page3():
 
     col1, col2, col3 = st.columns(3)
     with col1:
+        # PAGE 3 FIX: "Moyenne sur piste" (de l'avant, au complet)
         couleur = "vert" if pct_moy >= 60 else ("jaune" if pct_moy >= 40 else "rouge")
         st.markdown(
             f'<div class="kpi-card {couleur}"><div class="kpi-value">{pct_moy:.1f}'
             f'<span class="kpi-unit">%</span></div>'
-            f'<div class="kpi-label">Sur piste (moy.)</div></div>',
+            f'<div class="kpi-label">Moyenne sur piste</div></div>',
             unsafe_allow_html=True,
         )
     with col2:
+        # PAGE 3 FIX: "Médiane sur piste" (de l'avant)
         st.markdown(
             f'<div class="kpi-card"><div class="kpi-value">{pct_med:.1f}'
             f'<span class="kpi-unit">%</span></div>'
-            f'<div class="kpi-label">Sur piste (médiane)</div></div>',
+            f'<div class="kpi-label">Médiane sur piste</div></div>',
             unsafe_allow_html=True,
         )
     with col3:
+        # PAGE 3 FIX: "Distance moyenne réseau" (moy. → moyenne au complet)
         st.markdown(
             f'<div class="kpi-card bleu"><div class="kpi-value">{dist_moy:.0f}'
             f'<span class="kpi-unit">m</span></div>'
-            f'<div class="kpi-label">Distance moy. réseau</div></div>',
+            f'<div class="kpi-label">Distance moyenne réseau</div></div>',
             unsafe_allow_html=True,
         )
 
@@ -590,9 +578,37 @@ def render_page3():
     )
     cols_display = [c for c in ["Départ", "Arrivée", "Occurrences", "Dist. réseau (m)", "% sur piste"]
                     if c in df_trajets.columns]
-    st.dataframe(df_trajets[cols_display], use_container_width=True)
 
-    
+    # PAGE 3 FIX: index commence à 1 au lieu de 0
+    df_trajets_display = df_trajets[cols_display].copy().reset_index(drop=True)
+    df_trajets_display.index = range(1, len(df_trajets_display) + 1)
+    st.dataframe(
+        df_trajets_display,
+        use_container_width=True,
+        column_config={
+            "Départ": st.column_config.TextColumn(
+                "Départ",
+                help="Nom de la station Bixi de départ du trajet"
+            ),
+            "Arrivée": st.column_config.TextColumn(
+                "Arrivée",
+                help="Nom de la station Bixi d'arrivée du trajet"
+            ),
+            "Occurrences": st.column_config.NumberColumn(
+                "Occurrences",
+                help="Nombre de fois que ce trajet Origine-Destination a été effectué dans les données Bixi"
+            ),
+            "Dist. réseau (m)": st.column_config.NumberColumn(
+                "Dist. réseau (m)",
+                help="Distance totale du trajet calculée sur le graphe cyclable OSMnx (en mètres)"
+            ),
+            "% sur piste": st.column_config.NumberColumn(
+                "% sur piste",
+                help="Pourcentage de la distance du trajet effectuée sur une infrastructure cyclable protégée (piste ou bande)"
+            ),
+        }
+    )
+
     # ── Carte principale ─────────────────────────────────────────────────────
     st.markdown(
         '<div class="section-title">Carte — Trajets Bixi sur/hors infrastructure cyclable</div>',
@@ -624,7 +640,7 @@ def render_page3():
     <div style="margin-top:24px;background:#F4F6F7;border-radius:6px;
     padding:14px 18px;font-size:12px;color:#566573;line-height:1.8;border:1px solid #E5E8EC;">
       <b>Note méthodologique :</b>
-      Top {TOP_OD_PAIRS} paires O-D par fréquence absolue (CSV déjà agrégé, tri direct).
+      Top {TOP_OD_PAIRS} paires Origine-Destination par fréquence absolue (CSV déjà agrégé, tri direct).
       Graphe vélo OSMnx : <code>network_type="bike"</code> sur la boîte de Montréal.
       Routing : plus court chemin pondéré par <code>length</code> (Dijkstra).
       Classification protégé : jointure spatiale (buffer {BUFFER_M} m) avec le GeoJSON officiel
