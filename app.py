@@ -1240,28 +1240,50 @@ elif page == "Aide à la Décision":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # PAGE 4 FIX: Recommandation 1 — top 5 intersections à auditer calculées depuis les données sur piste
-    # Calcul des 5 zones sur piste les plus accidentogènes (groupby lat/lon arrondi)
+    # Recommandation 1 — Top 5 intersections réelles à auditer
+    # On groupe par cellule géographique fine (≈50 m) pour identifier des points physiques distincts,
+    # puis on géocode chaque centroïde pour obtenir l'adresse. On déduplique par adresse pour éviter
+    # que la même intersection apparaisse deux fois à cause d'un léger décalage GPS.
     gdf_sur_wgs = gdf_joined_wgs[gdf_joined_wgs["classification"] == "Sur piste"].copy()
-    gdf_sur_wgs["lat_g"] = (gdf_sur_wgs.geometry.y * 200).round() / 200
-    gdf_sur_wgs["lon_g"] = (gdf_sur_wgs.geometry.x * 200).round() / 200
-    top5_intersections = (
+
+    # Grille fine ~50 m (0.0005° ≈ 45 m à cette latitude)
+    gdf_sur_wgs["lat_g"] = (gdf_sur_wgs.geometry.y / 0.0005).round() * 0.0005
+    gdf_sur_wgs["lon_g"] = (gdf_sur_wgs.geometry.x / 0.0005).round() * 0.0005
+
+    clusters = (
         gdf_sur_wgs.groupby(["lat_g", "lon_g"])
-        .agg(nb=("GRAVITE", "count"), graves=("GRAVITE", lambda x: x.isin(["Mortel", "Blessé grave"]).sum()))
+        .agg(
+            nb=("GRAVITE", "count"),
+            graves=("GRAVITE", lambda x: x.isin(["Mortel", "Blessé grave"]).sum()),
+            score_=("GRAVITE", lambda x: x.isin(["Mortel", "Blessé grave"]).sum() * 3 + len(x))
+        )
         .reset_index()
-        .sort_values("nb", ascending=False)
-        .head(5)
+        .sort_values("score_", ascending=False)
+        .head(20)   # on en prend 20 pour pouvoir dédupliquer après géocodage
         .reset_index(drop=True)
     )
-    top5_html_rows = ""
-    for idx_t, row_t in top5_intersections.iterrows():
+
+    # Géocodage + déduplication par adresse (évite doublons rue Rachel × 2 clusters voisins)
+    seen_adresses = set()
+    top5_rows_clean = []
+    for _, row_t in clusters.iterrows():
         rue_t, qrt_t = reverse_geocode(row_t["lat_g"], row_t["lon_g"])
-        lieu = f"{rue_t}" + (f", {qrt_t}" if qrt_t else "")
-        grave_txt = f' · <span style="color:#C0392B;font-weight:600;">{int(row_t["graves"])} graves</span>' if row_t["graves"] > 0 else ""
+        cle = rue_t.strip().lower()
+        if cle in seen_adresses or rue_t == "Rue inconnue":
+            continue
+        seen_adresses.add(cle)
+        top5_rows_clean.append((rue_t, qrt_t, int(row_t["nb"]), int(row_t["graves"]), row_t["lat_g"], row_t["lon_g"]))
+        if len(top5_rows_clean) == 5:
+            break
+
+    top5_html_rows = ""
+    for idx_t, (rue_t, qrt_t, nb_t, grav_t, _, _) in enumerate(top5_rows_clean):
+        lieu = rue_t + (f", {qrt_t}" if qrt_t else "")
+        grave_txt = f' · <span style="color:#C0392B;font-weight:600;">{grav_t} grave{"s" if grav_t > 1 else ""}</span>' if grav_t > 0 else ""
         top5_html_rows += (
             f'<tr><td style="padding:6px 10px;font-weight:600;color:#1A5276;">#{idx_t+1}</td>'
             f'<td style="padding:6px 10px;">{lieu}</td>'
-            f'<td style="padding:6px 10px;text-align:center;">{int(row_t["nb"])}{grave_txt}</td></tr>'
+            f'<td style="padding:6px 10px;text-align:center;">{nb_t}{grave_txt}</td></tr>'
         )
 
     st.markdown(f"""
@@ -1272,21 +1294,22 @@ elif page == "Aide à la Décision":
         à moins de 15 m d'une infrastructure. Ce phénomène s'explique principalement par des
         <b>conflits aux intersections</b> : virages non protégés, angles morts pour les camions,
         feux non adaptés aux cyclistes. La recommandation est d'effectuer un audit terrain
-        des 5 intersections ci-dessous, puis d'y installer des <b>avances cyclistes</b>,
+        des 5 secteurs d'intersection ci-dessous (chaque entrée est un point géographique distinct),
+        puis d'y installer des <b>avances cyclistes</b>,
         des <b>sas vélo</b> aux feux rouges et des <b>déflecteurs physiques</b>.<br><br>
-        <b>Top 5 intersections à auditer en priorité :</b><br>
+        <b>Top 5 secteurs à auditer en priorité :</b><br>
         <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;">
           <thead>
             <tr style="background:#F0F3F6;">
               <th style="padding:6px 10px;text-align:left;color:#7F8C8D;font-weight:600;">Rang</th>
-              <th style="padding:6px 10px;text-align:left;color:#7F8C8D;font-weight:600;">Lieu</th>
+              <th style="padding:6px 10px;text-align:left;color:#7F8C8D;font-weight:600;">Secteur (rue la plus proche)</th>
               <th style="padding:6px 10px;text-align:center;color:#7F8C8D;font-weight:600;">Accidents</th>
             </tr>
           </thead>
           <tbody>{top5_html_rows}</tbody>
         </table>
       </div>
-      <div class="reco-meta">Source : Collisions SAAQ 2021 — accidents à ≤ 15 m d'une piste cyclable · géocodage Nominatim</div>
+      <div class="reco-meta">Source : Collisions SAAQ 2021 — accidents à ≤ 15 m d'une piste · clusters ~50 m · géocodage Nominatim · dédupliqués par adresse</div>
     </div>
     """, unsafe_allow_html=True)
 
